@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+</head>	
+<body>
+<h1>SPS/PPS Parser</h1>
+<script type="text/javascript">
+/*
+1. T-REC-H.264-200305-S!!PDF-E.pdf chapter 9.1 Parsing process for Exp-Golomb codes 
+2. http://en.wikipedia.org/wiki/Exponential-Golomb_coding
+3. http://www.cnblogs.com/jckimi/archive/2013/01/03/2842917.html
+*/
+
+var vBitCount=0;
+
+function get_bit(base, offset)
+{
+   var vCurBytes = (vBitCount+offset)>>3;	
+   offset = (vBitCount+offset) & 0x00000007;
+   return (((base[(vCurBytes)])) >> (0x7 - (offset & 0x7))) & 0x1;
+}
+
+function read_bits(pBuf, vReadBits)
+{
+   var vCurBytes = vBitCount/8;
+   var vCurBits = vBitCount%8;
+   var vOffset=0;
+   var vTmp=0, vTmp2=0;
+   
+   //document.write("<br/> u(" + vReadBits + ")");   
+   if(vReadBits == 1)
+   {
+      vTmp = get_bit(pBuf, vOffset);
+      //document.write(" " + vTmp);
+   }
+   else
+   {
+      for(i=0;i<vReadBits;i++)
+      {
+         vTmp2 =  get_bit(pBuf, i) ;
+         //document.write(" " + vTmp2);
+         vTmp = (vTmp << 1) + vTmp2;
+      }
+   }
+   
+   vBitCount += vReadBits;	
+   return vTmp;
+}
+
+// Reference
+function ue(base, offset)
+{		
+   var zeros = 0, vTmp = 0, vReturn = 0;
+   var vIdx = offset;
+
+   //document.write("<br/> ue(v)");
+   do
+   {
+      vTmp = get_bit(base, vIdx++);
+      //document.write(" " + vTmp);
+      if(vTmp==0)
+         zeros++;
+   }
+   while (0 == vTmp);
+   
+   if(zeros==0)
+   {
+      vBitCount += 1;
+      return 0;
+   }
+  
+	// insert first 1 bit
+	vReturn = 1 << zeros;
+	
+	for ( i = zeros - 1; i >= 0; i--, vIdx++)
+	{
+      vTmp = get_bit(base, vIdx);
+      //document.write(" " + vTmp);
+      vReturn |= vTmp << i; 
+	}	
+   
+   vBitCount += zeros*2 + 1;	
+	
+	return (vReturn - 1);
+}
+
+function se(base, offset)
+{		
+   var zeros = 0, vTmp = 0, vReturn = 0;
+   var vIdx = offset;
+
+   document.write("<br/> se(v)");
+   do
+   {
+      vTmp = get_bit(base, vIdx++);
+      document.write(" " + vTmp);
+      if(vTmp==0)
+         zeros++;
+   }
+	while (0 == vTmp);
+   
+   if(zeros==0)
+   {
+      vBitCount += 1;
+      return 0;
+   }
+  
+	// insert first 1 bit
+	vReturn = 1 << zeros;
+	
+	for ( i = zeros - 1; i >= 0; i--, vIdx++)
+	{
+      vTmp = get_bit(base, vIdx);
+      document.write(" " + vTmp);
+      vReturn |= vTmp << i; 
+	}
+	vBitCount += zeros*2 + 1;
+   
+   // (–1)k+1 Ceil(k÷2)
+   if(vReturn&0x1==1)
+      vReturn = -1 * Math.ceil(vReturn/2);
+   else
+      vReturn = Math.ceil(vReturn/2);
+	
+	return vReturn;
+}
+
+function seq_parameter_set_rbsp(pSPSBytes)
+{
+   // SPS parser
+   var index, profile_idc=0, pic_order_cnt_type=0;
+   var pic_width_in_mbs_minus1=0, pic_height_in_map_units_minus1=0;
+   var frame_mbs_only_flag=0, frame_cropping_flag=0;
+
+   // forbidden_zero_bit, nal_ref_idc, nal_unit_type
+   document.write("<h2>SPS</h2>" );
+   document.write("<br /> forbidden_zero_bit=" + read_bits(pSPSBytes, 1));
+   document.write("<br /> nal_ref_idc=" + read_bits(pSPSBytes, 2));
+   document.write("<br /> nal_unit_type=" + read_bits(pSPSBytes, 5));
+
+   // profile_idc
+   profile_idc = read_bits(pSPSBytes, 8);
+   document.write("<br /> profile_idc=" + profile_idc);
+
+   // constrained_set0_flag, ... , constrained_set4_flag, reserved_zero_3bits
+   document.write("<br /> constrained_set0_flag=" + read_bits(pSPSBytes, 1));
+   document.write("<br /> constrained_set1_flag=" + read_bits(pSPSBytes, 1));
+   document.write("<br /> constrained_set2_flag=" + read_bits(pSPSBytes, 1));
+   document.write("<br /> constrained_set3_flag=" + read_bits(pSPSBytes, 1));
+   document.write("<br /> constrained_set4_flag=" + read_bits(pSPSBytes, 1));
+   document.write("<br /> reserved_zero_3bits=" + read_bits(pSPSBytes, 3));
+
+   // level_idc
+   document.write("<br /> level_idc=" + read_bits(pSPSBytes, 8));
+
+   if((profile_idc==100)||(profile_idc==110)||(profile_idc==122)||
+      (profile_idc==244)||(profile_idc==44)||(profile_idc==83)||
+      (profile_idc==86)||(profile_idc==118))
+   {
+      document.write("<br />seq_parameter_set_id is future job");
+   }
+   else
+   {
+      document.write("<br />seq_parameter_set_id = " + ue(pSPSBytes, 0));
+   }
+
+   document.write("<br /> log2_max_frame_num_minus4=" + ue(pSPSBytes, 0));
+   pic_order_cnt_type = ue(pSPSBytes, 0); 
+   document.write("<br /> pic_order_cnt_type=" + pic_order_cnt_type);
+
+   if(pic_order_cnt_type==0)
+   {
+      document.write("<br /> log2_max_pic_order_cnt_lsb_minus4=" + ue(pSPSBytes, 0) );
+   }
+   else if(pic_order_cnt_type==1)
+   {
+      var num_ref_frames_in_pic_order_cnt_cycle=0;
+      document.write("<br /> delta_pic_order_always_zero_flag=" + read_bits(pSPSBytes, 1));
+      document.write("<br /> offset_for_non_ref_pic =" + ue(pSPSBytes, 0));
+      document.write("<br /> offset_for_top_to_bottom_field =" + ue(pSPSBytes, 0));
+      num_ref_frames_in_pic_order_cnt_cycle = ue(pSPSBytes, 0);
+      for(i=0;i<num_ref_frames_in_pic_order_cnt_cycle;i++)
+      {
+         document.write("<br /> num_ref_frames_in_pic_order_cnt_cycle =" + ue(pSPSBytes, 0));
+      }
+   }
+
+   document.write("<br /> num_ref_frames =" + ue(pSPSBytes, 0));
+   document.write("<br /> gaps_in_frame_num_value_allowed_flag =" + read_bits(pSPSBytes, 1));
+
+   pic_width_in_mbs_minus1 = ue(pSPSBytes, 0);
+   pic_height_in_map_units_minus1 = ue(pSPSBytes, 0);
+   document.write("<br /> pic_width_in_mbs_minus1 =" + pic_width_in_mbs_minus1);
+   document.write("<br /> pic_height_in_map_units_minus1 =" + pic_height_in_map_units_minus1);
+
+   document.write(" (resolution=" + ((pic_width_in_mbs_minus1+1)*16)  + "x" + ((pic_height_in_map_units_minus1+1)*16) +")" );
+
+   frame_mbs_only_flag = read_bits(pSPSBytes, 1);
+   document.write("<br /> frame_mbs_only_flag =" + frame_mbs_only_flag);
+
+   if(frame_mbs_only_flag==0)
+   {
+      document.write("<br /> mb_adaptive_frame_field_flag =" + read_bits(pSPSBytes, 1));
+   }
+   document.write("<br /> direct_8x8_interence_flag =" + read_bits(pSPSBytes, 1));
+   document.write("<br /> frame_cropping_flag =" + read_bits(pSPSBytes, 1));
+   if(frame_cropping_flag==1)
+   {
+      document.write("<br /> frame_cropping_rect_left_offset =" + ue(pSPSBytes, 0));
+      document.write("<br /> frame_cropping_rect_right_offset =" + ue(pSPSBytes, 0));
+      document.write("<br /> frame_cropping_rect_top_offset =" + ue(pSPSBytes, 0));
+      document.write("<br /> frame_cropping_rect_bottom_offset =" + ue(pSPSBytes, 0));
+   }
+
+   vui_parameters_present_flag = read_bits(pSPSBytes, 1);
+   document.write("<br /> vui_parameters_present_flag =" + vui_parameters_present_flag);
+
+   if(vui_parameters_present_flag)
+   {
+      document.write("<br /><br /> TODO <br /> vui_parameters unsupport" + read_bits(pSPSBytes, 1));
+   }
+   document.write("<br /><br />");
+}
+
+function pic_parameter_set_rbsp(pPPSBytes)
+{
+   // PPS parser --> 
+   // PPS decode : 0x68 0xce 0x30 0xa4 0x80 
+   // Reference http://ffmpeg.org/doxygen/0.6/h264__ps_8c-source.html#l00427
+   var num_slice_groups_minus1=0, slice_group_map_type=0;
+   var pic_size_in_map_units_minus1=0, chroma_qp_index_offset=0;
+
+   vBitCount = 0;
+   vBitLength = pDecodedPPS.length * 8;
+
+   document.write("<h2>PPS</h2>" );   
+   // forbidden_zero_bit, nal_ref_idc, nal_unit_type
+   document.write("<br /> forbidden_zero_bit=" + read_bits(pPPSBytes, 1));
+   document.write("<br /> nal_ref_idc=" + read_bits(pPPSBytes, 2));
+   document.write("<br /> nal_unit_type=" + read_bits(pPPSBytes, 5));
+
+   document.write("<br /> pic_parameter_set_id=" + ue(pPPSBytes, 0));
+   document.write("<br /> seq_parameter_set_id=" + ue(pPPSBytes, 0));
+   document.write("<br /> entropy_coding_mode_flag=" + read_bits(pPPSBytes, 1));
+   document.write("<br /> pic_order_present_flag=" + read_bits(pPPSBytes, 1));
+   num_slice_groups_minus1 = ue(pPPSBytes, 0);
+   document.write("<br /> num_slice_groups_minus1=" + num_slice_groups_minus1);
+   if(num_slice_groups_minus1>0)
+   {
+      slice_group_map_type = ue(pPPSBytes, 0);
+      document.write("<br /> num_slice_groups_minus1" + slice_group_map_type);  
+      if(slice_group_map_type==0)
+      {
+         for(iGroup=0;iGroup<=num_slice_groups_minus1;iGroup++)
+         {
+            document.write("<br /> run_length_minus1[" + iGrout + "]=" + ue(pPPSBytes, 0));         
+         }
+      }   
+      else if(slice_group_map_type==2)
+      {
+         for(iGroup=0;iGroup<=num_slice_groups_minus1;iGroup++)
+         {
+            document.write("<br /> top_left[" + iGrout + "]=" + ue(pPPSBytes, 0)); 
+            document.write("<br /> bottom_right[" + iGrout + "]=" + ue(pPPSBytes, 0));
+         }
+      }     
+      else if((slice_group_map_type==3)||(slice_group_map_type==4)||(slice_group_map_type==5))
+      {
+         document.write("<br /> slice_group_change_direction_flag" + read_bits(pPPSBytes, 1));
+         document.write("<br /> slice_group_change_rate_minus1" + ue(pPPSBytes, 0));
+      }   
+      else if(slice_group_map_type==6)
+      {
+         pic_size_in_map_units_minus1 = ue(pPPSBytes, 0);
+         document.write("<br /> pic_size_in_map_units_minus1" + pic_size_in_map_units_minus1);
+         for(iGroup=0;iGroup<=pic_size_in_map_units_minus1;iGroup++)
+         {
+            document.write("<br /><br /> slice_group_id[" + iGrout + "]=" + ue(pPPSBytes, 0));
+         }
+      }      
+   }
+
+   document.write("<br /> num_ref_idx_l0_active_minus1=" + ue(pPPSBytes, 0));
+   document.write("<br /> num_ref_idx_l1_active_minus1=" + ue(pPPSBytes, 0));
+   document.write("<br /> weighted_pref_flag=" + read_bits(pPPSBytes, 1));
+   document.write("<br /> weighted_bipred_idc=" + read_bits(pPPSBytes, 2));
+
+   document.write("<br /> pic_init_qp_minus26=" + se(pPPSBytes, 0));
+   document.write("<br /> pic_init_qs_minus26=" + se(pPPSBytes, 0));
+
+   chroma_qp_index_offset = se(pPPSBytes, 0);
+   document.write("<br /> chroma_qp_index_offset=" + chroma_qp_index_offset);
+
+   document.write("<br /> deblocking_filter_control_present_flag=" + read_bits(pPPSBytes, 1));
+   document.write("<br /> constrained_intra_pred_flag=" + read_bits(pPPSBytes, 1));
+   document.write("<br /> redundant_pic_cnt_present_flag=" + read_bits(pPPSBytes, 1));
+
+   /*
+   if(0)//vBitCount < vBitLength)
+   {
+      document.write("<br /> transform_8x8_mode_flag=" + read_bits(pPPSBytes, 1));
+      document.write("<br /> pic_scaling_matrix_present_flag=" + read_bits(pPPSBytes, 1));
+      //document.write("<br /> second_chroma_qp_index_offset" + ue(pPPSBytes, 0));
+   }
+   else
+   {
+      document.write("<br /> transform_8x8_mode_flag=0");
+      document.write("<br /> pic_scaling_matrix_present_flag=0");
+      document.write("<br /> second_chroma_qp_index_offset=" + chroma_qp_index_offset);
+   }
+   */
+   // rbsp_trainlig_bits()  rbsp_stop_one_bit + rbsp_alignment_zero_bit
+}
+
+
+function show_sps_pps()
+{	
+	/*
+	pSPS="Z0LgFNoFglE=";
+	pPPS="aM4wpIA=";	
+	SPS decode : 0x67 0x42 0xe0 0x14 0xda 0x5 0x82 0x51 
+	PPS decode : 0x68 0xce 0x30 0xa4 0x80 
+	*/	
+	
+	//pSPS="Z00AH9oC0EmlSAAAAwPAAAC7gwIAD6AAAjKN73wvCIRq";
+
+	pSPS = ThisForm.sps_input.value;
+	pPPS = ThisForm.pps_input.value;
+	
+	pDecodedSPS = atob(pSPS) ;
+	pDecodedPPS = atob(pPPS);
+
+	var pSPSBytes = [];
+	var pPPSBytes = [];
+	
+	for(i=0;i<pDecodedSPS.length;i++)
+	{
+		pSPSBytes.push(pDecodedSPS.charCodeAt(i));
+	}
+	for(i=0;i<pDecodedPPS.length;i++)
+	{
+		pPPSBytes.push(pDecodedPPS.charCodeAt(i));
+	}
+	
+	document.write("<br /> SPS: " + pSPS );
+	document.write("<br /> PPS : " + pPPS);
+	document.write("<br />");
+	document.write("<br /> SPS BASE64 decode : ");
+	for(i=0;i<pDecodedSPS.length;i++)
+	{ document.write( "0x" + pSPSBytes[i].toString(16) + ' ' ); }
+	document.write("<br /> PPS BASE64 decode : ");
+	for(i=0;i<pDecodedPPS.length;i++)
+	{ document.write( "0x" + pPPSBytes[i].toString(16) + ' ' ); }
+	document.write("<br />");
+	
+	seq_parameter_set_rbsp(pSPSBytes);
+	pic_parameter_set_rbsp(pPPSBytes);
+	
+	return true;
+
+}
+</script>
+
+
+
+<form name="ThisForm" action="#" onsubmit="return show_sps_pps();">
+SPS: <input type="text" name="sps_input" value="Z0LgFNoFglE=" size=80><br>
+PPS: <input type="text" name="pps_input" value="aM4wpIA=" size=80><br>
+<input type ="button" onclick="show_sps_pps(sps_input, pps_input)" value="Go"></input>
+</form>
+
+
+</body>
+</html> 
