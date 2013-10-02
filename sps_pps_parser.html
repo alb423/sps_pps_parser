@@ -13,6 +13,7 @@
 */
 
 var vBitCount=0;
+var vBitLength=0;
 
 function get_bit(base, offset)
 {
@@ -90,11 +91,11 @@ function se(base, offset)
    var zeros = 0, vTmp = 0, vReturn = 0;
    var vIdx = offset;
 
-   document.write("<br/> se(v)");
+   //document.write("<br/> se(v)");
    do
    {
       vTmp = get_bit(base, vIdx++);
-      document.write(" " + vTmp);
+      //document.write(" " + vTmp);
       if(vTmp==0)
          zeros++;
    }
@@ -112,7 +113,7 @@ function se(base, offset)
 	for ( i = zeros - 1; i >= 0; i--, vIdx++)
 	{
       vTmp = get_bit(base, vIdx);
-      document.write(" " + vTmp);
+      //document.write(" " + vTmp);
       vReturn |= vTmp << i; 
 	}
 	vBitCount += zeros*2 + 1;
@@ -126,13 +127,157 @@ function se(base, offset)
 	return vReturn;
 }
 
+function byte_aligned()
+{
+   if((vBitCount&0x00000007)==0) 
+      return 1;
+   else
+      return 0;
+}
+
+function hrd_parameters(pSPSBytes)
+{
+   var cpb_cnt_minus1 = ue(pSPSBytes, 0);
+   document.write("<br /><br /> cpb_cnt_minus1=" + cpb_cnt_minus1);
+   document.write("<br /> bit_rate_scale =" + read_bits(pSPSBytes, 4));
+   document.write("<br /> cpb_size_scale=" + read_bits(pSPSBytes, 4));
+   for( SchedSelIdx = 0; SchedSelIdx <= cpb_cnt_minus1; SchedSelIdx++ ) 
+   {
+      document.write("<br /> bit_rate_value_minus1=" + ue(pSPSBytes, 0));
+      document.write("<br /> cpb_size_value_minus1=" + ue(pSPSBytes, 0));
+      document.write("<br /> cbr_flag=" + read_bits(pSPSBytes, 1));
+   }
+   document.write("<br /> initial_cpb_removal_delay_length_minus1=" + read_bits(pSPSBytes, 5));
+   document.write("<br /> cpb_removal_delay_length_minus1=" + read_bits(pSPSBytes, 5));
+   document.write("<br /> dpb_output_delay_length_minus1=" + read_bits(pSPSBytes, 5));   
+   document.write("<br /> time_offset_length=" + read_bits(pSPSBytes, 5));    
+}
+
+function vui_parameters(pSPSBytes)
+{
+   var aspect_ratio_info_present_flag, aspect_ratio_idc;
+   var overscan_info_present_flag, video_signal_type_present_flag, colour_description_present_flag;
+   var chroma_loc_info_present_flag, timing_info_present_flag;
+   var nal_hrd_parameters_present_flag, vcl_hrd_parameters_present_flag, bitstream_restriction_flag;
+   
+   aspect_ratio_info_present_flag = read_bits(pSPSBytes, 1);
+   document.write("<br /><br /> aspect_ratio_info_present_flag=" + aspect_ratio_info_present_flag);
+   if( aspect_ratio_info_present_flag ) 
+   {
+      aspect_ratio_idc = read_bits(pSPSBytes, 8);
+      document.write("<br /> aspect_ratio_idc=" + aspect_ratio_idc);      
+      if(aspect_ratio_idc==1) // Extended_SAR ??
+      {
+         document.write("<br /> sar_width=" + read_bits(pSPSBytes, 16));
+         document.write("<br /> sar_height=" + read_bits(pSPSBytes, 16));
+      }
+   }      
+   
+   overscan_info_present_flag = read_bits(pSPSBytes, 1);
+   document.write("<br /> overscan_info_present_flag=" + overscan_info_present_flag);
+   if( overscan_info_present_flag )
+   {
+      document.write("<br /> overscan_appropriate_flag=" + read_bits(pSPSBytes, 1));
+   }
+   
+   video_signal_type_present_flag = read_bits(pSPSBytes, 1);
+   document.write("<br /> video_signal_type_present_flag=" + video_signal_type_present_flag);
+   if( video_signal_type_present_flag ) 
+   {
+      document.write("<br /> video_format=" + read_bits(pSPSBytes, 3));
+      document.write("<br /> video_full_range_flag=" + read_bits(pSPSBytes, 1));
+      colour_description_present_flag = read_bits(pSPSBytes, 1);
+      if(colour_description_present_flag)
+      {
+         document.write("<br /> colour_primaries=" + read_bits(pSPSBytes, 8));
+         document.write("<br /> transfer_characteristics=" + read_bits(pSPSBytes, 8));
+         document.write("<br /> matrix_coefficients=" + read_bits(pSPSBytes, 8));
+      }
+   }
+   
+   chroma_loc_info_present_flag = read_bits(pSPSBytes, 1);
+   document.write("<br /> chroma_loc_info_present_flag=" + chroma_loc_info_present_flag);
+   if( chroma_loc_info_present_flag ) 
+   {
+      document.write("<br /> chroma_sample_loc_type_top_field=" + ue(pSPSBytes, 0));
+      document.write("<br /> chroma_sample_loc_type_bottom_field=" + ue(pSPSBytes, 0));
+   }
+   
+   timing_info_present_flag = read_bits(pSPSBytes, 1);
+   document.write("<br /> timing_info_present_flag=" + timing_info_present_flag);
+   if( timing_info_present_flag ) 
+   {
+      document.write("<br /> num_units_in_tick=" + read_bits(pSPSBytes, 32));
+      document.write("<br /> time_scale=" + read_bits(pSPSBytes, 32));
+      document.write("<br /> fixed_frame_rate_flag=" + read_bits(pSPSBytes, 1));
+   }
+   
+   nal_hrd_parameters_present_flag = read_bits(pSPSBytes, 1);
+   document.write("<br /> nal_hrd_parameters_present_flag=" + nal_hrd_parameters_present_flag);
+   if( nal_hrd_parameters_present_flag )
+   {
+      hrd_parameters(pSPSBytes);
+   }
+   
+   vcl_hrd_parameters_present_flag = read_bits(pSPSBytes, 1);
+   document.write("<br /> vcl_hrd_parameters_present_flag=" + vcl_hrd_parameters_present_flag);
+   if( vcl_hrd_parameters_present_flag )
+   {
+      hrd_parameters();
+   }
+   
+   if( nal_hrd_parameters_present_flag || vcl_hrd_parameters_present_flag )
+   {
+      document.write("<br /> low_delay_hrd_flag=" + read_bits(pSPSBytes, 1));
+   }
+   
+   document.write("<br /> pic_struct_present_flag=" + read_bits(pSPSBytes, 1));
+   bitstream_restriction_flag = read_bits(pSPSBytes, 1);
+   document.write("<br /> bitstream_restriction_flag=" + bitstream_restriction_flag);
+   if( bitstream_restriction_flag )
+   {
+      document.write("<br /> motion_vectors_over_pic_boundaries_flag=" + read_bits(pSPSBytes, 1));
+      document.write("<br /> max_bytes_per_pic_denom=" + ue(pSPSBytes, 0));
+      document.write("<br /> max_bits_per_mb_denom=" + ue(pSPSBytes, 0));
+      document.write("<br /> log2_max_mv_length_horizontal 0=" + ue(pSPSBytes, 0));
+      document.write("<br /> log2_max_mv_length_vertical=" + ue(pSPSBytes, 0));
+      document.write("<br /> num_reorder_frames=" + ue(pSPSBytes, 0));
+      document.write("<br /> max_dec_frame_buffering=" + ue(pSPSBytes, 0));
+   }
+}
+
+function rbsp_trailing_bits(pInput)
+{
+   // Chapter 7.3.2.11 
+   var rbsp_stop_one_bit = 0;
+   if(vBitCount+1 == vBitLength)
+   {
+      document.write("<br /><br /> END OF PARSE <br />");
+      return 1;
+   }
+   document.write("<br /> vBitCount=" + vBitCount + "  vBitLength=" + vBitLength);
+   rbsp_stop_one_bit = read_bits(pInput, 1); // equal to 1
+   document.write("<br /> rbsp_stop_one_bit=" + rbsp_stop_one_bit);
+   while(!byte_aligned())
+   {
+      rbsp_alignment_zero_bit = read_bits(pInput, 1);
+      document.write("<br /> rbsp_alignment_zero_bit=" + rbsp_alignment_zero_bit);
+   }
+   document.write("<br /><br /> END OF PARSE <br />");
+   return 1;
+}
+
 function seq_parameter_set_rbsp(pSPSBytes)
 {
+   // Chapter 7.3.2.1
    // SPS parser
    var index, profile_idc=0, pic_order_cnt_type=0;
    var pic_width_in_mbs_minus1=0, pic_height_in_map_units_minus1=0;
    var frame_mbs_only_flag=0, frame_cropping_flag=0;
 
+   vBitCount = 0;
+   vBitLength = pSPSBytes.length * 8;
+   
    // forbidden_zero_bit, nal_ref_idc, nal_unit_type
    document.write("<h2>SPS</h2>" );
    document.write("<br /> forbidden_zero_bit=" + read_bits(pSPSBytes, 1));
@@ -158,7 +303,7 @@ function seq_parameter_set_rbsp(pSPSBytes)
       (profile_idc==244)||(profile_idc==44)||(profile_idc==83)||
       (profile_idc==86)||(profile_idc==118))
    {
-      document.write("<br />seq_parameter_set_id is future job");
+      document.write("<br />special seq_parameter_set_id is future job");
    }
    else
    {
@@ -177,12 +322,12 @@ function seq_parameter_set_rbsp(pSPSBytes)
    {
       var num_ref_frames_in_pic_order_cnt_cycle=0;
       document.write("<br /> delta_pic_order_always_zero_flag=" + read_bits(pSPSBytes, 1));
-      document.write("<br /> offset_for_non_ref_pic =" + ue(pSPSBytes, 0));
-      document.write("<br /> offset_for_top_to_bottom_field =" + ue(pSPSBytes, 0));
+      document.write("<br /> offset_for_non_ref_pic =" + se(pSPSBytes, 0));
+      document.write("<br /> offset_for_top_to_bottom_field =" + se(pSPSBytes, 0));
       num_ref_frames_in_pic_order_cnt_cycle = ue(pSPSBytes, 0);
       for(i=0;i<num_ref_frames_in_pic_order_cnt_cycle;i++)
       {
-         document.write("<br /> num_ref_frames_in_pic_order_cnt_cycle =" + ue(pSPSBytes, 0));
+         document.write("<br /> num_ref_frames_in_pic_order_cnt_cycle =" + se(pSPSBytes, 0));
       }
    }
 
@@ -218,9 +363,11 @@ function seq_parameter_set_rbsp(pSPSBytes)
 
    if(vui_parameters_present_flag)
    {
-      document.write("<br /><br /> TODO <br /> vui_parameters unsupport" + read_bits(pSPSBytes, 1));
+      vui_parameters(pSPSBytes);
    }
+   rbsp_trailing_bits(pSPSBytes);
    document.write("<br /><br />");
+   
 }
 
 function pic_parameter_set_rbsp(pPPSBytes)
@@ -232,7 +379,7 @@ function pic_parameter_set_rbsp(pPPSBytes)
    var pic_size_in_map_units_minus1=0, chroma_qp_index_offset=0;
 
    vBitCount = 0;
-   vBitLength = pDecodedPPS.length * 8;
+   vBitLength = pPPSBytes.length * 8;
 
    document.write("<h2>PPS</h2>" );   
    // forbidden_zero_bit, nal_ref_idc, nal_unit_type
@@ -296,6 +443,7 @@ function pic_parameter_set_rbsp(pPPSBytes)
    document.write("<br /> constrained_intra_pred_flag=" + read_bits(pPPSBytes, 1));
    document.write("<br /> redundant_pic_cnt_present_flag=" + read_bits(pPPSBytes, 1));
 
+   rbsp_trailing_bits(pPPSBytes);
    /*
    if(0)//vBitCount < vBitLength)
    {
@@ -316,13 +464,15 @@ function pic_parameter_set_rbsp(pPPSBytes)
 
 function show_sps_pps()
 {	
-	/*
-	pSPS="Z0LgFNoFglE=";
-	pPPS="aM4wpIA=";	
-	SPS decode : 0x67 0x42 0xe0 0x14 0xda 0x5 0x82 0x51 
-	PPS decode : 0x68 0xce 0x30 0xa4 0x80 
+   /*
+   // a test sample that vui_parameters_present_flag = 0
+      pSPS="Z0LgFNoFglE=";
+      pPPS="aM4wpIA=";	
+      SPS decode : 0x67 0x42 0xe0 0x14 0xda 0x5 0x82 0x51 
+      PPS decode : 0x68 0xce 0x30 0xa4 0x80 
 	*/	
 	
+   // a test sample that vui_parameters_present_flag = 1
 	//pSPS="Z00AH9oC0EmlSAAAAwPAAAC7gwIAD6AAAjKN73wvCIRq";
 
 	pSPS = ThisForm.sps_input.value;
@@ -343,13 +493,13 @@ function show_sps_pps()
 		pPPSBytes.push(pDecodedPPS.charCodeAt(i));
 	}
 	
-	document.write("<br /> SPS: " + pSPS );
-	document.write("<br /> PPS : " + pPPS);
+	document.write("<br /> SPS Input: " + pSPS );
+	document.write("<br /> PPS Input: " + pPPS);
 	document.write("<br />");
-	document.write("<br /> SPS BASE64 decode : ");
+	document.write("<br /> SPS Base64 decode : ");
 	for(i=0;i<pDecodedSPS.length;i++)
 	{ document.write( "0x" + pSPSBytes[i].toString(16) + ' ' ); }
-	document.write("<br /> PPS BASE64 decode : ");
+	document.write("<br /> PPS Base64 decode : ");
 	for(i=0;i<pDecodedPPS.length;i++)
 	{ document.write( "0x" + pPPSBytes[i].toString(16) + ' ' ); }
 	document.write("<br />");
