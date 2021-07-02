@@ -349,7 +349,8 @@ function seq_parameter_set_rbsp(pSPSBytes)
       document.write("<br /> mb_adaptive_frame_field_flag =" + read_bits(pSPSBytes, 1));
    }
    document.write("<br /> direct_8x8_interence_flag =" + read_bits(pSPSBytes, 1));
-   document.write("<br /> frame_cropping_flag =" + read_bits(pSPSBytes, 1));
+   frame_cropping_flag = read_bits(pSPSBytes, 1);
+   document.write("<br /> frame_cropping_flag =" + frame_cropping_flag);
    if(frame_cropping_flag==1)
    {
       document.write("<br /> frame_cropping_rect_left_offset =" + ue(pSPSBytes, 0));
